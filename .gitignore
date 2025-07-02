@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.*
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# VSCode
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# RSS output (if generated to file)
+rss_feed.xml
+
+# App state files
+last_uid.txt
+summaries.db

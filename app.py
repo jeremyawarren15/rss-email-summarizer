@@ -1,10 +1,10 @@
 import os
 import logging
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request
 from dotenv import load_dotenv
 from email_fetcher import fetch_emails_since, get_latest_uid
 from summarizer import summarize_email
-from persistence import init_db, insert_summary, fetch_all_summaries
+from persistence import init_db, insert_summary, fetch_all_summaries, get_db_path
 from feedgen.feed import FeedGenerator
 from apscheduler.schedulers.background import BackgroundScheduler
 from imapclient import IMAPClient
@@ -23,7 +23,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configuration
-LAST_UID_FILE = os.path.join(os.getenv('DATA_DIR', '.'), 'last_uid.txt')
+LAST_UID_FILE = 'last_uid.txt'  # Simplified - just use current directory
 
 
 def read_last_uid():
@@ -40,9 +40,30 @@ def read_last_uid():
     return None
 
 def write_last_uid(uid):
-    with open(LAST_UID_FILE, 'w') as f:
-        f.write(str(uid))
-    logger.info(f'Updated last UID to {uid}')
+    # Debug information
+    logger.info(f'Attempting to write UID {uid} to {LAST_UID_FILE}')
+
+    # Get user info (Unix/Linux only)
+    try:
+        logger.info(f'Current user ID: {os.getuid()}')
+    except AttributeError:
+        logger.info('Running on Windows (no getuid available)')
+
+    logger.info(f'Current working directory: {os.getcwd()}')
+    logger.info(f'Directory writable: {os.access(".", os.W_OK)}')
+
+    if os.path.exists(LAST_UID_FILE):
+        logger.info(f'File exists, writable: {os.access(LAST_UID_FILE, os.W_OK)}')
+    else:
+        logger.info('File does not exist, will create new')
+
+    try:
+        with open(LAST_UID_FILE, 'w') as f:
+            f.write(str(uid))
+        logger.info(f'Successfully updated last UID to {uid}')
+    except Exception as e:
+        logger.error(f'Failed to write UID file: {e}')
+        raise e
 
 
 def initialize_last_uid():
@@ -192,7 +213,11 @@ def rss_feed():
 
 @app.route('/status')
 def status_check():
+    # Check if we should do a full LLM test (add ?test_llm=true to URL)
+    test_llm = request.args.get('test_llm', 'false').lower() == 'true'
+
     status = {'imap': 'ok', 'ollama': 'ok', 'sqlite': 'ok', 'overall': 'ok'}
+
     # IMAP: check and count emails, list folders
     try:
         logger.info('Checking IMAP connection...')
@@ -211,26 +236,39 @@ def status_check():
         status['imap'] = {'status': f'error: {e}', 'email_count': None, 'folders': None}
         status['overall'] = 'error'
         logger.error(f'IMAP check failed: {e}')
-    # Ollama: test LLM with a sample prompt
+
+    # Ollama: lightweight check or full test
     try:
         logger.info('Checking Ollama connection...')
         ollama_url = os.getenv('OLLAMA_API_URL')
         ollama_model = os.getenv('OLLAMA_MODEL', 'llama3')
         ollama_timeout = int(os.getenv('OLLAMA_TIMEOUT', '60'))
-        test_prompt = "Summarize: This is a test email about a bank account."
-        resp = requests.post(ollama_url, json={"model": ollama_model, "prompt": test_prompt, "stream": False}, timeout=ollama_timeout)
-        resp.raise_for_status()
-        data = resp.json()
-        status['ollama'] = {'status': 'ok', 'test_response': data.get('response', '').strip()}
-        logger.info('Ollama connection OK.')
+
+        if test_llm:
+            # Full test with LLM call
+            test_prompt = "Test"
+            resp = requests.post(ollama_url, json={"model": ollama_model, "prompt": test_prompt, "stream": False}, timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
+            status['ollama'] = {'status': 'ok', 'test_response': data.get('response', '').strip()[:100]}
+            logger.info('Ollama LLM test OK.')
+        else:
+            # Lightweight check - just verify the API endpoint responds
+            resp = requests.get(ollama_url.replace('/api/generate', '/'), timeout=5)
+            if resp.status_code in [200, 404]:  # 404 is normal for Ollama root
+                status['ollama'] = {'status': 'ok', 'note': 'Lightweight check - add ?test_llm=true for full test'}
+                logger.info('Ollama connection OK (lightweight check).')
+            else:
+                raise Exception(f"Unexpected status code: {resp.status_code}")
     except Exception as e:
         status['ollama'] = {'status': f'error: {e}', 'test_response': None}
         status['overall'] = 'error'
         logger.error(f'Ollama check failed: {e}')
+
     # SQLite: count summaries
     try:
         logger.info('Checking SQLite connection...')
-        conn = sqlite3.connect('summaries.db')
+        conn = sqlite3.connect(get_db_path())
         c = conn.cursor()
         c.execute('SELECT COUNT(*) FROM summaries')
         count = c.fetchone()[0]
@@ -241,6 +279,7 @@ def status_check():
         status['sqlite'] = {'status': f'error: {e}', 'summary_count': None}
         status['overall'] = 'error'
         logger.error(f'SQLite check failed: {e}')
+
     return jsonify(status)
 
 

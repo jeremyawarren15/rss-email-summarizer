@@ -16,32 +16,27 @@ RUN useradd --create-home --shell /bin/bash appuser
 # Set working directory
 WORKDIR /app
 
-# Copy and install Python dependencies first (for better caching)
+# Copy and install Python dependencies as root, then change ownership
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code as root
 COPY *.py ./
+COPY system_prompt.md ./
 
-# Create directories for data persistence
-RUN mkdir -p /app/data && chown appuser:appuser /app/data
+# Give ownership of everything to appuser
+RUN chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
-
-# Create volume mount point for persistent data
-VOLUME ["/app/data"]
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:5000/status', timeout=5)" || exit 1
 
 # Expose the port
 EXPOSE 5000
 
 # Set default environment variables (can be overridden)
 ENV FLASK_HOST=0.0.0.0 \
-    FLASK_PORT=5000
+    FLASK_PORT=5000 \
+    DATA_DIR=/app
 
 # Run the application
 CMD ["python", "app.py"]

@@ -51,19 +51,25 @@ The easiest way to deploy is using Docker Compose:
      - USER_NAME=Your Name
    ```
 
-3. **Start the services:**
+3. **Create the data directory:**
+
+   ```bash
+   mkdir -p data
+   ```
+
+4. **Start the services:**
 
    ```bash
    docker-compose up -d
    ```
 
-4. **Pull the Ollama model (first time only):**
+5. **Pull the Ollama model (first time only):**
 
    ```bash
    docker-compose exec ollama ollama pull llama3
    ```
 
-5. **Check status:**
+6. **Check status:**
    ```bash
    curl http://localhost:5000/status
    ```

@@ -6,11 +6,11 @@ services:
     ports:
       - "5000:5000"
     environment:
-      # Email configuration (set these values)
-      - IMAP_HOST=your.imap.server.com
+      # Email configuration (REPLACE THESE WITH YOUR ACTUAL VALUES)
+      - IMAP_HOST=your.imap.server.com # e.g., imap.gmail.com, outlook.office365.com
       - IMAP_PORT=993
-      - IMAP_USER=your-email@example.com
-      - IMAP_PASSWORD=your-password
+      - IMAP_USER=your-email@example.com # Your actual email address
+      - IMAP_PASSWORD=your-password # Your actual password or app password
 
       # Ollama configuration
       - OLLAMA_API_URL=http://ollama:11434/api/generate
@@ -28,9 +28,9 @@ services:
       # - EMAIL_WHITELIST=friend@example.com,family@example.com
       # - EMAIL_BLACKLIST=marketing@company.com,noreply@spam.com
 
-    # For testing without persistence, comment out volumes
-    # volumes:
-    #   - ./data:/app  # Uncomment for data persistence
+    # For data persistence, uncomment the volumes section below
+    volumes:
+      - ./data:/app # Uncomment for data persistence
     # Alternative: use named volume instead of bind mount
     # - app_data:/app
 
@@ -39,18 +39,8 @@ services:
 
     restart: unless-stopped
 
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import requests; requests.get('http://localhost:5000/status', timeout=5)",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # Removed health check to avoid frequent LLM calls
+    # Use /status endpoint manually to check health
 
   ollama:
     image: ollama/ollama:latest

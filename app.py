@@ -181,13 +181,35 @@ def get_last_n_day_summaries(n=30):
 
 @app.route('/rss')
 def rss_feed():
+    from flask import request
+
+    # Get the base URL from the request
+    base_url = request.url_root.rstrip('/')
+
     fg = FeedGenerator()
     fg.title('Important Emails Digest')
-    fg.link(href='http://localhost:5000/rss', rel='self')
+    fg.link(href=f'{base_url}/rss', rel='self')
     fg.description('Daily digests of important emails as determined by AI')
     fg.language('en')
 
+    # Add required RSS elements for better compatibility
+    fg.id(f'{base_url}/rss')
+    fg.author({'name': os.getenv('USER_NAME', 'Email Summarizer'), 'email': 'noreply@localhost'})
+    fg.lastBuildDate(datetime.now(timezone.utc))
+    fg.generator('RSS Email Summarizer')
+
     digests = get_last_n_day_summaries(30)
+
+    # If no digests, add a placeholder entry so the feed isn't completely empty
+    if not digests:
+        fe = fg.add_entry()
+        fe.id(f'{base_url}/rss/no-emails')
+        fe.title('No Important Emails Yet')
+        fe.description('No important emails have been processed yet. Check back later.')
+        fe.link(href=f'{base_url}/status')
+        fe.author({'name': os.getenv('USER_NAME', 'Email Summarizer'), 'email': 'noreply@localhost'})
+        fe.pubDate(datetime.now(timezone.utc))
+
     for day, summaries in digests:
         if not summaries:
             continue
@@ -201,10 +223,13 @@ def rss_feed():
             digest += f'<p style="margin: 5px 0; color: #666; font-style: italic;">From: {s["from_name"]}</p>'
             digest += f'<p style="margin: 10px 0; line-height: 1.4;">{s["summary"]}</p>'
             digest += '</div>'
+
         fe = fg.add_entry()
-        fe.id(f'digest-{day}')
+        fe.id(f'{base_url}/rss/digest-{day}')
         fe.title(f'Important Emails - {title_date}')
         fe.description(digest)
+        fe.link(href=f'{base_url}/rss')  # Add required link element
+        fe.author({'name': os.getenv('USER_NAME', 'Email Summarizer'), 'email': 'noreply@localhost'})
         fe.pubDate(datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc))
 
     rss_content = fg.rss_str(pretty=True)
